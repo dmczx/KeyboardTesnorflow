@@ -1,3 +1,6 @@
+We are using this keyboard to test our model, the keyboard doesn't belong to us and we would like to thank mccorby for the keyboard.
+
+
 # SMART KEYBOARD - n-gram approach
 
 This app shows how to use an ngram model to allow the user to select words based on the input
@@ -13,3 +16,6 @@ To use the keyboard, enable it on your device. Go on Settings > Language and Inp
 
 
 Read more in the companion article [here]  
+
+
+
