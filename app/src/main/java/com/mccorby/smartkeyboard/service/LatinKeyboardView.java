@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 package com.mccorby.smartkeyboard.service;
-
 import android.content.Context;
 import android.inputmethodservice.Keyboard;
 import android.inputmethodservice.Keyboard.Key;

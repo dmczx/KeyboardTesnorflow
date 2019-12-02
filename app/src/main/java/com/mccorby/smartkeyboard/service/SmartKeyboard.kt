@@ -1,5 +1,4 @@
 package com.mccorby.smartkeyboard.service
-
 import android.content.Context
 import android.inputmethodservice.InputMethodService
 import android.inputmethodservice.Keyboard
@@ -20,7 +19,6 @@ import com.mccorby.smartkeyboard.R
 import org.koin.android.ext.android.inject
 import kotlin.math.max
 
-
 private const val N_PREDICTIONS = 3
 // TODO This should come from a config file representing the model
 private const val MODEL_ORDER = 5
@@ -36,7 +34,6 @@ class SmartKeyboard : InputMethodService(), KeyboardView.OnKeyboardActionListene
     private var inputView: LatinKeyboardView? = null
     private var candidateView: CandidateView? = null
     private var completions: Array<CompletionInfo>? = null
-
     private val composing = StringBuilder()
     private var predictionOn: Boolean = false
     private var completionOn: Boolean = false
@@ -44,9 +41,13 @@ class SmartKeyboard : InputMethodService(), KeyboardView.OnKeyboardActionListene
     private var capsLock: Boolean = false
     private var lastShiftTime: Long = 0
     private var metaState: Long = 0
-
+    private var Elqm: Boolean = true
+    private var isEnglish: Boolean = true
     private var qwertyKeyboard: LatinKeyboard? = null
-
+    private var SymbolsKeyboard: LatinKeyboard? = null
+    private var SymbolsShiftedKeyboard: LatinKeyboard? = null
+    private var arabicK: LatinKeyboard? = null
+    private var CurKeyboard: LatinKeyboard? = null
     private lateinit var wordSeparators: Set<Char>
 
     val ngrams: NGrams by inject()
@@ -76,6 +77,9 @@ class SmartKeyboard : InputMethodService(), KeyboardView.OnKeyboardActionListene
             lastDisplayWidth = displayWidth
         }
         this.qwertyKeyboard = LatinKeyboard(this, R.xml.qwerty)
+        this.SymbolsKeyboard = LatinKeyboard(this, R.xml.symbols)
+        this.SymbolsShiftedKeyboard = LatinKeyboard(this, R.xml.symbols_shift)
+        this.arabicK = LatinKeyboard(this, R.xml.arabic)
     }
 
     /**
@@ -116,11 +120,12 @@ class SmartKeyboard : InputMethodService(), KeyboardView.OnKeyboardActionListene
      * bound to the client, and are now receiving all of the detailed information
      * about the target of our edits.
      */
-    override fun onStartInput(attribute: EditorInfo, restarting: Boolean) {
+     override fun onStartInput(attribute: EditorInfo, restarting: Boolean) {
         super.onStartInput(attribute, restarting)
 
         // Reset our state.  We want to do this even if restarting, because
         // the underlying state of the text editor could have changed in any way.
+        composing.setLength(0)
         updateCandidates()
 
         if (!restarting) {
@@ -135,12 +140,22 @@ class SmartKeyboard : InputMethodService(), KeyboardView.OnKeyboardActionListene
         // We are now going to initialize our state based on the type of
         // text being edited.
         when (attribute.inputType and InputType.TYPE_MASK_CLASS) {
+            InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_DATETIME ->
+                // Numbers and dates default to the symbols keyboard, with
+                // no extra features.
+                CurKeyboard = SymbolsKeyboard
+
+            InputType.TYPE_CLASS_PHONE ->
+                // Phones will also default to the symbols keyboard, though
+                // often you will want to have a dedicated phone keyboard.
+                CurKeyboard = SymbolsKeyboard
+
             InputType.TYPE_CLASS_TEXT -> {
                 // This is general text editing.  We will default to the
                 // normal alphabetic keyboard, and assume that we should
                 // be doing predictive text (showing candidates as the
                 // user types).
-
+                CurKeyboard = qwertyKeyboard
                 predictionOn = true
 
                 // We now look for a few special variations of text that will
@@ -180,14 +195,14 @@ class SmartKeyboard : InputMethodService(), KeyboardView.OnKeyboardActionListene
             else -> {
                 // For all unknown input types, default to the alphabetic
                 // keyboard with no special features.
-
+                CurKeyboard = qwertyKeyboard
                 updateShiftKeyState(attribute)
             }
         }
 
         // Update the label on the enter key, depending on what the application
         // says it will do.
-        this.qwertyKeyboard!!.setImeOptions(resources, attribute.imeOptions)
+        CurKeyboard?.setImeOptions(resources, attribute.imeOptions)
     }
 
     /**
@@ -287,13 +302,10 @@ class SmartKeyboard : InputMethodService(), KeyboardView.OnKeyboardActionListene
         if (c == 0 || ic == null) {
             return false
         }
-
         if (c and KeyCharacterMap.COMBINING_ACCENT != 0) {
             c = c and KeyCharacterMap.COMBINING_ACCENT_MASK
         }
-
         onKey(c, null)
-
         return true
     }
 
@@ -419,10 +431,44 @@ class SmartKeyboard : InputMethodService(), KeyboardView.OnKeyboardActionListene
             return
         } else if (primaryCode == LatinKeyboardView.KEYCODE_OPTIONS) {
             // Show a menu or somethin'
-        } else {
+        }
+        else if (primaryCode == Keyboard.KEYCODE_MODE_CHANGE && inputView != null) {
+            isEnglish = false
+            setCandidatesViewShown(false)
+            val current = inputView!!.getKeyboard()
+            if (current === SymbolsKeyboard || current === SymbolsShiftedKeyboard) {
+                qwertyKeyboard?.let { setLatinKeyboard(it) }
+            } else {
+                SymbolsKeyboard?.let { setLatinKeyboard(it) }
+                SymbolsKeyboard?.setShifted(false)
+            }
+        }     else if (primaryCode == 10001) {
+            isEnglish = false
+            setCandidatesViewShown(false)
+            val current = inputView!!.getKeyboard()
+            qwertyKeyboard?.let { setLatinKeyboard(it) }
+        inputView!!.setKeyboard(arabicK);
+
+        }else if (primaryCode == 10002) {
+            setCandidatesViewShown(true)
+            isEnglish = true
+            val current = inputView!!.getKeyboard()
+        inputView!!.setKeyboard(qwertyKeyboard)
+
+    }else if (primaryCode == 46){
+            if (Elqm) {
+              Elqm = false
+                setCandidatesViewShown(false)
+            } else if(!Elqm) {
+                Elqm = true
+                setCandidatesViewShown(true)
+            }
+        }
+        else {
             handleCharacter(primaryCode, keyCodes)
         }
     }
+
 
     override fun onText(text: CharSequence) {
         val ic = currentInputConnection ?: return
@@ -449,16 +495,19 @@ class SmartKeyboard : InputMethodService(), KeyboardView.OnKeyboardActionListene
         }
     }
 
-    private fun setSuggestions(suggestions: List<String>) {
-        if (suggestions.isNotEmpty()) {
-            setCandidatesViewShown(true)
-        } else if (isExtractViewShown) {
-            setCandidatesViewShown(true)
+        private fun setSuggestions(suggestions: List<String>) {
+            if(Elqm && isEnglish){
+            if (suggestions.isNotEmpty()) {
+                setCandidatesViewShown(true)
+            } else if (isExtractViewShown) {
+                setCandidatesViewShown(true)
+            }
+            if (candidateView != null) {
+                candidateView!!.setSuggestions(suggestions)
+            }
         }
-        if (candidateView != null) {
-            candidateView!!.setSuggestions(suggestions)
         }
-    }
+
 
     private fun handleBackspace() {
         val length = composing.length
@@ -478,10 +527,25 @@ class SmartKeyboard : InputMethodService(), KeyboardView.OnKeyboardActionListene
         updateShiftKeyState(currentInputEditorInfo)
     }
 
+
     private fun handleShift() {
-        inputView?.let {
+        if (inputView == null) {
+            return
+        }
+
+        val currentKeyboard = inputView!!.getKeyboard()
+        if (qwertyKeyboard === currentKeyboard) {
+            // Alphabet keyboard
             checkToggleCapsLock()
             inputView!!.isShifted = capsLock || !inputView!!.isShifted
+        } else if (currentKeyboard === SymbolsKeyboard) {
+            SymbolsKeyboard?.setShifted(true)
+            SymbolsShiftedKeyboard?.let { setLatinKeyboard(it) }
+            SymbolsShiftedKeyboard?.isShifted = true
+        } else if (currentKeyboard === SymbolsShiftedKeyboard) {
+            SymbolsShiftedKeyboard!!.isShifted = false
+            SymbolsKeyboard?.let { setLatinKeyboard(it) }
+            SymbolsKeyboard?.setShifted(false)
         }
     }
 

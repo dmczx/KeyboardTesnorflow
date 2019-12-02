@@ -1,5 +1,4 @@
 package com.mccorby.smartkeyboard.di
-
 import com.mccorby.machinelearning.nlp.LanguageModel
 import com.mccorby.machinelearning.nlp.NGrams
 import com.mccorby.machinelearning.nlp.RankingModel

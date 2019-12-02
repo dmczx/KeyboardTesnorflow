@@ -150,5 +150,14 @@ public class LatinKeyboard extends Keyboard {
         public boolean isInside(int x, int y) {
             return super.isInside(x, codes[0] == KEYCODE_CANCEL ? y - 10 : y);
         }
+
+        public boolean isIn(int x, int y) {
+            if(x>y) {
+                return true;
+            }
+            else {
+                return false;
+            }
+        }
     }
 }
